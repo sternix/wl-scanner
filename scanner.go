@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	//	"text/template"
 	"strings"
 )
 
@@ -192,27 +191,6 @@ func main() {
 			requestBody(req,reqCodeName).WriteTo(&ifaceBuffer)
 
 			ifaceBuffer.WriteString("\n}\n")
-/*
-
-tek registry bind karışık
-
-eger arg new_id ve interface != "" ise 
-ret := New + NEW_ID_INTERFACE)(p.Connection) 
-p.Connection().SendRequest(p, REQ_CODE , Proxy(ret) , ....)
-şeklinde
-
-tek bir tane new_id olabilir
-
-ve return 'de (*NEW_ID_INTERFACE , error)
-
-eğer arg object ve interface != "" ise
-bunlar metod parametresi
-
-allow-null ???
-
-type uint ise enum tipine bakmalı???
-
-*/
 		}
 
 		// Enums - Constants
@@ -270,8 +248,7 @@ func requestArgs(req Request) *bytes.Buffer {
 	)
 
 	for _,arg := range req.Args {
-
-		// special type for example registry.bind
+		// special type, for example registry.bind
 		if arg.Type == "new_id" {
 			if arg.Interface == "" {
 				args = append(args,"iface string")
