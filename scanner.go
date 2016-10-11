@@ -79,7 +79,7 @@ type (
 )
 
 var (
-	wlTypes map[string]string = map[string]string {
+	wlTypes map[string]string = map[string]string{
 		"int":    "int32",
 		"uint":   "uint32",
 		"string": "string",
@@ -88,9 +88,9 @@ var (
 		"array":  "[]int32",
 	}
 
-	wlNames map[string]string
-	constBuffer bytes.Buffer
-	ifaceBuffer bytes.Buffer
+	wlNames        map[string]string
+	constBuffer    bytes.Buffer
+	ifaceBuffer    bytes.Buffer
 	reqCodesBuffer bytes.Buffer
 )
 
@@ -122,7 +122,7 @@ func main() {
 	}
 
 	reqCodesBuffer.WriteString("\n//Interface Request Codes\n") // request codes
-	reqCodesBuffer.WriteString("\nconst (\n") // request codes
+	reqCodesBuffer.WriteString("\nconst (\n")                   // request codes
 	for _, iface := range protocol.Interfaces {
 		var eventBuffer bytes.Buffer
 		var eventNames []string
@@ -174,8 +174,8 @@ func main() {
 		// order used for request identification
 		for order, req := range iface.Requests {
 			reqName := CamelCase(req.Name)
-			reqCodeName := strings.ToTitle(fmt.Sprintf("_%s_%s",ifaceName , reqName)) // first _ for not export constant
-			reqCodesBuffer.WriteString(fmt.Sprintf("%s = %d\n",reqCodeName,order))
+			reqCodeName := strings.ToTitle(fmt.Sprintf("_%s_%s", ifaceName, reqName)) // first _ for not export constant
+			reqCodesBuffer.WriteString(fmt.Sprintf("%s = %d\n", reqCodeName, order))
 
 			ifaceBuffer.WriteString(fmt.Sprintf("\nfunc (p *%s) %s(", ifaceName, reqName))
 			// get args buffer
@@ -188,7 +188,7 @@ func main() {
 			ifaceBuffer.WriteString("{\n")
 
 			// get method body
-			requestBody(req,reqCodeName).WriteTo(&ifaceBuffer)
+			requestBody(req, reqCodeName).WriteTo(&ifaceBuffer)
 
 			ifaceBuffer.WriteString("\n}\n")
 		}
@@ -240,32 +240,31 @@ func CamelCase(wlName string) string {
 	return wlName
 }
 
-
 func requestArgs(req Request) *bytes.Buffer {
 	var (
-		args []string
+		args       []string
 		argsBuffer bytes.Buffer
 	)
 
-	for _,arg := range req.Args {
+	for _, arg := range req.Args {
 		// special type, for example registry.bind
 		if arg.Type == "new_id" {
 			if arg.Interface == "" {
-				args = append(args,"iface string")
-				args = append(args,"version uint32")
-				args = append(args,fmt.Sprintf("%s Proxy",arg.Name))
+				args = append(args, "iface string")
+				args = append(args, "version uint32")
+				args = append(args, fmt.Sprintf("%s Proxy", arg.Name))
 			} else {
 				continue
 			}
 		} else if arg.Type == "object" && arg.Interface != "" {
 			argTypeName := wlNames[arg.Interface]
-			args = append(args,fmt.Sprintf("%s *%s",arg.Name,argTypeName))
+			args = append(args, fmt.Sprintf("%s *%s", arg.Name, argTypeName))
 		} else {
-			args = append(args,fmt.Sprintf("%s %s",arg.Name,wlTypes[arg.Type]))
+			args = append(args, fmt.Sprintf("%s %s", arg.Name, wlTypes[arg.Type]))
 		}
 	}
 
-	for i,arg := range args {
+	for i, arg := range args {
 		if i > 0 {
 			argsBuffer.WriteString(",")
 		}
@@ -277,25 +276,25 @@ func requestArgs(req Request) *bytes.Buffer {
 
 func requestRets(req Request) *bytes.Buffer {
 	var (
-		rets []string
+		rets       []string
 		retsBuffer bytes.Buffer
 	)
 
-	for _,arg := range req.Args {
+	for _, arg := range req.Args {
 		if arg.Type == "new_id" && arg.Interface != "" {
 			retTypeName := wlNames[arg.Interface]
-			rets = append(rets,fmt.Sprintf("*%s",retTypeName))
+			rets = append(rets, fmt.Sprintf("*%s", retTypeName))
 		}
 	}
 
 	// all request have an error return
-	rets = append(rets," error")
+	rets = append(rets, " error")
 
 	if len(rets) > 1 {
 		retsBuffer.WriteString("(")
 	}
 
-	for i,ret := range rets {
+	for i, ret := range rets {
 		if i > 0 {
 			retsBuffer.WriteString(",")
 		}
@@ -309,37 +308,36 @@ func requestRets(req Request) *bytes.Buffer {
 	return &retsBuffer
 }
 
-func requestBody(req Request , reqCodeName string ) *bytes.Buffer {
+func requestBody(req Request, reqCodeName string) *bytes.Buffer {
 	var (
-		params []string
-		bodyBuffer bytes.Buffer
+		params       []string
+		bodyBuffer   bytes.Buffer
 		paramsBuffer bytes.Buffer
-		hasRetType string
+		hasRetType   string
 	)
 
-	for _,arg := range req.Args {
+	for _, arg := range req.Args {
 		if arg.Type == "new_id" {
 			if arg.Interface != "" {
 				retTypeName := wlNames[arg.Interface]
-				bodyBuffer.WriteString(fmt.Sprintf("ret := New%s(p.Connection())\n",retTypeName))
-				params = append(params,"Proxy(ret)")
+				bodyBuffer.WriteString(fmt.Sprintf("ret := New%s(p.Connection())\n", retTypeName))
+				params = append(params, "Proxy(ret)")
 				hasRetType = "ret,"
 			} else {
-				params = append(params,"iface")
-				params = append(params,"version")
-				params = append(params,arg.Name)
+				params = append(params, "iface")
+				params = append(params, "version")
+				params = append(params, arg.Name)
 			}
 		} else {
-			params = append(params,arg.Name)
+			params = append(params, arg.Name)
 		}
 	}
 
 	for _, param := range params {
-		paramsBuffer.WriteString(fmt.Sprintf(",%s",param))
+		paramsBuffer.WriteString(fmt.Sprintf(",%s", param))
 	}
 
-	bodyBuffer.WriteString(fmt.Sprintf("return %s p.Connection().SendRequest(p,%s%s)" , hasRetType , reqCodeName , paramsBuffer.String()))
+	bodyBuffer.WriteString(fmt.Sprintf("return %s p.Connection().SendRequest(p,%s%s)", hasRetType, reqCodeName, paramsBuffer.String()))
 
 	return &bodyBuffer
 }
-
