@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
-	"os/exec"
 )
 
 type (
@@ -98,7 +98,7 @@ var (
 func main() {
 	xmlFilePath, err := filepath.Abs("wayland.xml")
 	if err != nil {
-		log.Fatalf("Cannot find wayland.xml: %s",err)
+		log.Fatalf("Cannot find wayland.xml: %s", err)
 	}
 
 	xmlFile, err := os.Open(xmlFilePath)
@@ -137,10 +137,10 @@ func main() {
 
 	reqCodesBuffer.WriteString(")") // request codes end
 
-	if _,err := os.Stat("client.go"); os.IsNotExist(err) {
-		file , err := os.Create("client.go")
+	if _, err := os.Stat("client.go"); os.IsNotExist(err) {
+		file, err := os.Create("client.go")
 		if err != nil {
-			log.Fatalf("Cannot create file: %s",err)
+			log.Fatalf("Cannot create file: %s", err)
 		}
 
 		constBuffer.WriteTo(file)
@@ -148,12 +148,12 @@ func main() {
 		ifaceBuffer.WriteTo(file)
 
 		file.Close()
-		goex , err := exec.LookPath("go")
+		goex, err := exec.LookPath("go")
 		if err != nil {
 			log.Println("go executable cannot found run \"go fmt client.go\" yourself")
 			return
 		} else {
-			cmd := exec.Command(goex,"fmt","client.go")
+			cmd := exec.Command(goex, "fmt", "client.go")
 			err := cmd.Run()
 			if err != nil {
 				log.Fatal(err)
