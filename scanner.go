@@ -114,10 +114,11 @@ func main() {
 
 	wlNames = make(map[string]string)
 
-	constBuffer.WriteString("package wl")
+	//	constBuffer.WriteString("package wl")
+	constBuffer.WriteString("package wayland")
 
 	for _, iface := range protocol.Interfaces {
-		//required for arg types
+		//required for arg type's determine
 		registerAndCase(iface.Name)
 	}
 
@@ -135,7 +136,12 @@ func main() {
 			eventBuffer.WriteString(fmt.Sprintf("\ntype %s struct {\n", typeName))
 			for _, arg := range event.Args {
 				if t, ok := wlTypes[arg.Type]; ok { // if basic type
-					eventBuffer.WriteString(fmt.Sprintf("%s %s\n", CamelCase(arg.Name), t))
+					if arg.Type == "uint" && arg.Enum != "" { // enum type
+						enumTypeName := ifaceName + CamelCase(arg.Enum)
+						eventBuffer.WriteString(fmt.Sprintf("%s %s\n", CamelCase(arg.Name), enumTypeName))
+					} else {
+						eventBuffer.WriteString(fmt.Sprintf("%s %s\n", CamelCase(arg.Name), t))
+					}
 				} else { // interface type
 					if (arg.Type == "object" || arg.Type == "new_id") && arg.Interface != "" {
 						t = "*" + wlNames[arg.Interface]
@@ -179,7 +185,7 @@ func main() {
 
 			ifaceBuffer.WriteString(fmt.Sprintf("\nfunc (p *%s) %s(", ifaceName, reqName))
 			// get args buffer
-			requestArgs(req).WriteTo(&ifaceBuffer)
+			requestArgs(ifaceName, req).WriteTo(&ifaceBuffer)
 
 			ifaceBuffer.WriteString(")") // close the args
 
@@ -222,6 +228,18 @@ func registerAndCase(wlName string) string {
 	return wlName
 }
 
+func enumArgName(ifaceName , enumName string) string {
+	if strings.Index(enumName, ".") == -1 {
+		return ifaceName + CamelCase(enumName)
+	} else {
+		parts := strings.Split(enumName, ".")
+		if len(parts) != 2 {
+			log.Fatal("enum args must be \"interface.enum\" format")
+		}
+		return CamelCase(parts[0]) + CamelCase(parts[1])
+	}
+}
+
 // only cases
 func CamelCase(wlName string) string {
 	if strings.HasPrefix(wlName, "wl_") {
@@ -240,7 +258,7 @@ func CamelCase(wlName string) string {
 	return wlName
 }
 
-func requestArgs(req Request) *bytes.Buffer {
+func requestArgs(ifaceName string, req Request) *bytes.Buffer {
 	var (
 		args       []string
 		argsBuffer bytes.Buffer
@@ -259,6 +277,8 @@ func requestArgs(req Request) *bytes.Buffer {
 		} else if arg.Type == "object" && arg.Interface != "" {
 			argTypeName := wlNames[arg.Interface]
 			args = append(args, fmt.Sprintf("%s *%s", arg.Name, argTypeName))
+		} else if arg.Type == "uint" && arg.Enum != "" {
+			args = append(args, fmt.Sprintf("%s %s", arg.Name, enumArgName(ifaceName , arg.Enum)))
 		} else {
 			args = append(args, fmt.Sprintf("%s %s", arg.Name, wlTypes[arg.Type]))
 		}

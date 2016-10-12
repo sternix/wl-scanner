@@ -1,2 +1,2 @@
-enum types for events and args
 allow-null
+bitfield
