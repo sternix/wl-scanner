@@ -463,7 +463,6 @@ func fmtFile() {
 	goex, err := exec.LookPath("go")
 	if err != nil {
 		log.Println("go executable cannot found run \"go fmt client.go\" yourself")
-		return
 	} else {
 		cmd := exec.Command(goex, "fmt", "client.go")
 		err := cmd.Run()
