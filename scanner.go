@@ -3,8 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/xml"
+	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -93,24 +96,45 @@ var (
 	constBuffer    bytes.Buffer
 	ifaceBuffer    bytes.Buffer
 	reqCodesBuffer bytes.Buffer
+
+	overwrite = flag.Bool("o", false, "Overwrite existing client.go file")
+	develXml  = flag.Bool("dev", false, "Get development version of wayland.xml from repository")
 )
 
-func main() {
-	xmlFilePath, err := filepath.Abs("wayland.xml")
-	if err != nil {
-		log.Fatalf("Cannot find wayland.xml: %s", err)
-	}
+func init() {
+	flag.Parse()
+	log.SetFlags(0)
+}
 
-	xmlFile, err := os.Open(xmlFilePath)
-	if err != nil {
-		log.Fatal(err)
+func main() {
+	var xmlFile *os.File
+
+	if *develXml {
+		file, err := getDevelXml()
+		if err != nil {
+			file.Close()
+			log.Fatalf("Error while reading xml file : %s", err)
+		}
+		xmlFile = file
+		xmlFile.Seek(0, 0)
+	} else {
+		xmlFilePath, err := filepath.Abs("wayland.xml")
+		if err != nil {
+			log.Fatalf("Cannot find wayland.xml: %s", err)
+		}
+
+		file, err := os.Open(xmlFilePath)
+		if err != nil {
+			log.Fatal("Cannot open wayland.xml")
+		}
+		xmlFile = file
 	}
 
 	defer xmlFile.Close()
 
 	var protocol Protocol
 	if err := xml.NewDecoder(xmlFile).Decode(&protocol); err != nil {
-		log.Fatal(err)
+		log.Fatalf("Cannot decode wayland.xml : %s", err)
 	}
 
 	wlNames = make(map[string]string)
@@ -137,31 +161,27 @@ func main() {
 
 	reqCodesBuffer.WriteString(")") // request codes end
 
-	if _, err := os.Stat("client.go"); os.IsNotExist(err) {
-		file, err := os.Create("client.go")
-		if err != nil {
-			log.Fatalf("Cannot create file: %s", err)
-		}
-
-		constBuffer.WriteTo(file)
-		reqCodesBuffer.WriteTo(file)
-		ifaceBuffer.WriteTo(file)
-
-		file.Close()
-		goex, err := exec.LookPath("go")
-		if err != nil {
-			log.Println("go executable cannot found run \"go fmt client.go\" yourself")
+	// if file exists
+	if _, err := os.Stat("client.go"); err == nil {
+		if !*overwrite {
+			log.Printf("client.go exists if you want to overwrite try -o flag")
 			return
-		} else {
-			cmd := exec.Command(goex, "fmt", "client.go")
-			err := cmd.Run()
-			if err != nil {
-				log.Fatal(err)
-			}
 		}
-	} else {
-		fmt.Println("client.go file is exist in current directory!")
 	}
+
+	file, err := os.Create("client.go")
+	if err != nil {
+		log.Fatalf("Cannot create file: %s", err)
+	}
+
+	constBuffer.WriteTo(file)
+	reqCodesBuffer.WriteTo(file)
+	ifaceBuffer.WriteTo(file)
+
+	file.Close()
+
+	// go fmt file
+	fmtFile()
 }
 
 // register names to map
@@ -410,4 +430,45 @@ func requestBody(req Request, reqCodeName string) *bytes.Buffer {
 	bodyBuffer.WriteString(fmt.Sprintf("return %s p.Connection().SendRequest(p,%s%s)", hasRetType, reqCodeName, paramsBuffer.String()))
 
 	return &bodyBuffer
+}
+
+func getDevelXml() (*os.File, error) {
+	url := "https://cgit.freedesktop.org/wayland/wayland/plain/protocol/wayland.xml"
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("http get error")
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Cannot get wayland.xml StatusCode error")
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("Cannot read response body")
+	} else {
+		file, err := ioutil.TempFile("", "devel_wayland_xml")
+		if err != nil {
+			return nil, fmt.Errorf("Cannot create temp file")
+		} else {
+			file.Write(body)
+			return file, nil
+		}
+	}
+}
+
+func fmtFile() {
+	goex, err := exec.LookPath("go")
+	if err != nil {
+		log.Println("go executable cannot found run \"go fmt client.go\" yourself")
+		return
+	} else {
+		cmd := exec.Command(goex, "fmt", "client.go")
+		err := cmd.Run()
+		if err != nil {
+			log.Fatalf("Cannot run cmd : %s", err)
+		}
+	}
 }
