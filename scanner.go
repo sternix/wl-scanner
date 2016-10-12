@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"os/exec"
 )
 
 type (
@@ -97,7 +98,7 @@ var (
 func main() {
 	xmlFilePath, err := filepath.Abs("wayland.xml")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Cannot find wayland.xml: %s",err)
 	}
 
 	xmlFile, err := os.Open(xmlFilePath)
@@ -114,121 +115,64 @@ func main() {
 
 	wlNames = make(map[string]string)
 
-	//	constBuffer.WriteString("package wl")
-	constBuffer.WriteString("package wayland")
+	constBuffer.WriteString("package wl")
 
 	for _, iface := range protocol.Interfaces {
 		//required for arg type's determine
-		registerAndCase(iface.Name)
+		caseAndRegister(iface.Name)
 	}
 
 	reqCodesBuffer.WriteString("\n//Interface Request Codes\n") // request codes
 	reqCodesBuffer.WriteString("\nconst (\n")                   // request codes
+
 	for _, iface := range protocol.Interfaces {
-		var eventBuffer bytes.Buffer
-		var eventNames []string
-		var ifaceName = wlNames[iface.Name]
-
-		// Event struct types
-		for _, event := range iface.Events {
-			eventName := registerAndCase(event.Name)
-			typeName := ifaceName + eventName + "Event"
-			eventBuffer.WriteString(fmt.Sprintf("\ntype %s struct {\n", typeName))
-			for _, arg := range event.Args {
-				if t, ok := wlTypes[arg.Type]; ok { // if basic type
-					if arg.Type == "uint" && arg.Enum != "" { // enum type
-						enumTypeName := ifaceName + CamelCase(arg.Enum)
-						eventBuffer.WriteString(fmt.Sprintf("%s %s\n", CamelCase(arg.Name), enumTypeName))
-					} else {
-						eventBuffer.WriteString(fmt.Sprintf("%s %s\n", CamelCase(arg.Name), t))
-					}
-				} else { // interface type
-					if (arg.Type == "object" || arg.Type == "new_id") && arg.Interface != "" {
-						t = "*" + wlNames[arg.Interface]
-					} else {
-						t = "Proxy"
-					}
-					eventBuffer.WriteString(fmt.Sprintf("%s %s\n", CamelCase(arg.Name), t))
-				}
-			}
-
-			eventNames = append(eventNames, eventName)
-			eventBuffer.WriteString("}\n")
-		}
-
+		eventBuffer, eventNames := interfaceEvents(iface)
 		eventBuffer.WriteTo(&ifaceBuffer)
 
-		// interface type definition
-		ifaceBuffer.WriteString(fmt.Sprintf("\ntype %s struct {\n", ifaceName))
-		ifaceBuffer.WriteString("BaseProxy\n")
-		for _, evName := range eventNames {
-			ifaceBuffer.WriteString(fmt.Sprintf("%s chan %s\n", evName+"Chan", ifaceName+evName+"Event"))
-		}
-		ifaceBuffer.WriteString("}\n")
-
-		// interface constructor
-		ifaceBuffer.WriteString(fmt.Sprintf("\nfunc New%s(conn *Connection) *%s {\n", ifaceName, ifaceName))
-		ifaceBuffer.WriteString(fmt.Sprintf("ret := new(%s)\n", ifaceName))
-		for _, evName := range eventNames {
-			ifaceBuffer.WriteString(fmt.Sprintf("ret.%s = make(chan %s)\n", evName+"Chan", ifaceName+evName+"Event"))
-		}
-		ifaceBuffer.WriteString("conn.Register(ret)\n")
-		ifaceBuffer.WriteString("return ret\n")
-		ifaceBuffer.WriteString("}\n")
-
-		// interface method definitions (requests)
-		// order used for request identification
-		for order, req := range iface.Requests {
-			reqName := CamelCase(req.Name)
-			reqCodeName := strings.ToTitle(fmt.Sprintf("_%s_%s", ifaceName, reqName)) // first _ for not export constant
-			reqCodesBuffer.WriteString(fmt.Sprintf("%s = %d\n", reqCodeName, order))
-
-			ifaceBuffer.WriteString(fmt.Sprintf("\nfunc (p *%s) %s(", ifaceName, reqName))
-			// get args buffer
-			requestArgs(ifaceName, req).WriteTo(&ifaceBuffer)
-
-			ifaceBuffer.WriteString(")") // close the args
-
-			// get returns buffer
-			requestRets(req).WriteTo(&ifaceBuffer)
-			ifaceBuffer.WriteString("{\n")
-
-			// get method body
-			requestBody(req, reqCodeName).WriteTo(&ifaceBuffer)
-
-			ifaceBuffer.WriteString("\n}\n")
-		}
-
-		// Enums - Constants
-		for _, enum := range iface.Enums {
-			enumName := registerAndCase(enum.Name)
-			constTypeName := ifaceName + enumName
-			constBuffer.WriteString(fmt.Sprintf("\ntype %s uint\n", constTypeName)) // enums are uint
-			constBuffer.WriteString("const (\n")
-			for _, entry := range enum.Entries {
-				entryName := registerAndCase(entry.Name)
-				constName := ifaceName + enumName + entryName
-				constBuffer.WriteString(fmt.Sprintf("%s %s = %s\n", constName, constTypeName, entry.Value))
-			}
-			constBuffer.WriteString(")\n")
-		}
+		interfaceTypes(iface, eventNames)
+		interfaceConstructor(iface, eventNames)
+		interfaceRequests(iface)
+		interfaceEnums(iface)
 	}
+
 	reqCodesBuffer.WriteString(")") // request codes end
 
-	constBuffer.WriteTo(os.Stdout)
-	reqCodesBuffer.WriteTo(os.Stdout)
-	ifaceBuffer.WriteTo(os.Stdout)
+	if _,err := os.Stat("client.go"); os.IsNotExist(err) {
+		file , err := os.Create("client.go")
+		if err != nil {
+			log.Fatalf("Cannot create file: %s",err)
+		}
+
+		constBuffer.WriteTo(file)
+		reqCodesBuffer.WriteTo(file)
+		ifaceBuffer.WriteTo(file)
+
+		file.Close()
+		goex , err := exec.LookPath("go")
+		if err != nil {
+			log.Println("go executable cannot found run \"go fmt client.go\" yourself")
+			return
+		} else {
+			cmd := exec.Command(goex,"fmt","client.go")
+			err := cmd.Run()
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	} else {
+		fmt.Println("client.go file is exist in current directory!")
+	}
 }
 
 // register names to map
-func registerAndCase(wlName string) string {
+func caseAndRegister(wlName string) string {
 	var orj string = wlName
 	wlName = CamelCase(wlName)
 	wlNames[orj] = wlName
 	return wlName
 }
 
-func enumArgName(ifaceName , enumName string) string {
+func enumArgName(ifaceName, enumName string) string {
 	if strings.Index(enumName, ".") == -1 {
 		return ifaceName + CamelCase(enumName)
 	} else {
@@ -240,7 +184,6 @@ func enumArgName(ifaceName , enumName string) string {
 	}
 }
 
-// only cases
 func CamelCase(wlName string) string {
 	if strings.HasPrefix(wlName, "wl_") {
 		wlName = strings.TrimPrefix(wlName, "wl_")
@@ -256,6 +199,113 @@ func CamelCase(wlName string) string {
 	wlName = strings.Replace(wlName, " ", "", -1)
 
 	return wlName
+}
+
+func interfaceConstructor(iface Interface, eventNames []string) {
+	ifaceName := wlNames[iface.Name]
+
+	// interface constructor
+	ifaceBuffer.WriteString(fmt.Sprintf("\nfunc New%s(conn *Connection) *%s {\n", ifaceName, ifaceName))
+	ifaceBuffer.WriteString(fmt.Sprintf("ret := new(%s)\n", ifaceName))
+	for _, evName := range eventNames {
+		ifaceBuffer.WriteString(fmt.Sprintf("ret.%s = make(chan %s)\n", evName+"Chan", ifaceName+evName+"Event"))
+	}
+	ifaceBuffer.WriteString("conn.Register(ret)\n")
+	ifaceBuffer.WriteString("return ret\n")
+	ifaceBuffer.WriteString("}\n")
+}
+
+func interfaceTypes(iface Interface, eventNames []string) {
+	ifaceName := wlNames[iface.Name]
+	// interface type definition
+	ifaceBuffer.WriteString(fmt.Sprintf("\ntype %s struct {\n", ifaceName))
+	ifaceBuffer.WriteString("BaseProxy\n")
+	for _, evName := range eventNames {
+		ifaceBuffer.WriteString(fmt.Sprintf("%s chan %s\n", evName+"Chan", ifaceName+evName+"Event"))
+	}
+	ifaceBuffer.WriteString("}\n")
+}
+
+func interfaceRequests(iface Interface) {
+	ifaceName := wlNames[iface.Name]
+
+	// interface method definitions (requests)
+	// order used for request identification
+	for order, req := range iface.Requests {
+		reqName := CamelCase(req.Name)
+		reqCodeName := strings.ToTitle(fmt.Sprintf("_%s_%s", ifaceName, reqName)) // first _ for not export constant
+		reqCodesBuffer.WriteString(fmt.Sprintf("%s = %d\n", reqCodeName, order))
+
+		ifaceBuffer.WriteString(fmt.Sprintf("\nfunc (p *%s) %s(", ifaceName, reqName))
+		// get args buffer
+		requestArgs(ifaceName, req).WriteTo(&ifaceBuffer)
+
+		ifaceBuffer.WriteString(")") // close the args
+
+		// get returns buffer
+		requestRets(req).WriteTo(&ifaceBuffer)
+		ifaceBuffer.WriteString("{\n")
+
+		// get method body
+		requestBody(req, reqCodeName).WriteTo(&ifaceBuffer)
+
+		ifaceBuffer.WriteString("\n}\n")
+	}
+}
+
+func interfaceEnums(iface Interface) {
+	ifaceName := wlNames[iface.Name]
+
+	// Enums - Constants
+	for _, enum := range iface.Enums {
+		enumName := caseAndRegister(enum.Name)
+		constTypeName := ifaceName + enumName
+		constBuffer.WriteString(fmt.Sprintf("\ntype %s uint32\n", constTypeName)) // enums are uint
+		constBuffer.WriteString("const (\n")
+		for _, entry := range enum.Entries {
+			entryName := caseAndRegister(entry.Name)
+			constName := ifaceName + enumName + entryName
+			constBuffer.WriteString(fmt.Sprintf("%s %s = %s\n", constName, constTypeName, entry.Value))
+		}
+		constBuffer.WriteString(")\n")
+	}
+}
+
+func interfaceEvents(iface Interface) (bytes.Buffer, []string) {
+	var (
+		eventBuffer bytes.Buffer
+		eventNames  []string
+		ifaceName   = wlNames[iface.Name]
+	)
+
+	// Event struct types
+	for _, event := range iface.Events {
+		eventName := caseAndRegister(event.Name)
+		typeName := ifaceName + eventName + "Event"
+		eventBuffer.WriteString(fmt.Sprintf("\ntype %s struct {\n", typeName))
+		for _, arg := range event.Args {
+			if t, ok := wlTypes[arg.Type]; ok { // if basic type
+				if arg.Type == "uint" && arg.Enum != "" { // enum type
+					enumTypeName := ifaceName + CamelCase(arg.Enum)
+					eventBuffer.WriteString(fmt.Sprintf("%s %s\n", CamelCase(arg.Name), enumTypeName))
+				} else {
+					eventBuffer.WriteString(fmt.Sprintf("%s %s\n", CamelCase(arg.Name), t))
+				}
+			} else { // interface type
+				if (arg.Type == "object" || arg.Type == "new_id") && arg.Interface != "" {
+					t = "*" + wlNames[arg.Interface]
+				} else {
+					t = "Proxy"
+				}
+				eventBuffer.WriteString(fmt.Sprintf("%s %s\n", CamelCase(arg.Name), t))
+			}
+		}
+
+		eventNames = append(eventNames, eventName)
+		eventBuffer.WriteString("}\n")
+	}
+
+	return eventBuffer, eventNames
 }
 
 func requestArgs(ifaceName string, req Request) *bytes.Buffer {
@@ -278,7 +328,7 @@ func requestArgs(ifaceName string, req Request) *bytes.Buffer {
 			argTypeName := wlNames[arg.Interface]
 			args = append(args, fmt.Sprintf("%s *%s", arg.Name, argTypeName))
 		} else if arg.Type == "uint" && arg.Enum != "" {
-			args = append(args, fmt.Sprintf("%s %s", arg.Name, enumArgName(ifaceName , arg.Enum)))
+			args = append(args, fmt.Sprintf("%s %s", arg.Name, enumArgName(ifaceName, arg.Enum)))
 		} else {
 			args = append(args, fmt.Sprintf("%s %s", arg.Name, wlTypes[arg.Type]))
 		}
