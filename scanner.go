@@ -354,12 +354,7 @@ func requestArgs(ifaceName string, req Request) *bytes.Buffer {
 		}
 	}
 
-	for i, arg := range args {
-		if i > 0 {
-			argsBuffer.WriteString(",")
-		}
-		argsBuffer.WriteString(arg)
-	}
+	argsBuffer.WriteString(strings.Join(args,","))
 
 	return &argsBuffer
 }
@@ -380,19 +375,14 @@ func requestRets(req Request) *bytes.Buffer {
 	// all request have an error return
 	rets = append(rets, "error")
 
+	retstr := strings.Join(rets,",")
+
 	if len(rets) > 1 {
 		retsBuffer.WriteString("(")
-	}
-
-	for i, ret := range rets {
-		if i > 0 {
-			retsBuffer.WriteString(",")
-		}
-		retsBuffer.WriteString(ret)
-	}
-
-	if len(rets) > 1 {
+		retsBuffer.WriteString(retstr)
 		retsBuffer.WriteString(")")
+	} else {
+		retsBuffer.WriteString(retstr)
 	}
 
 	return &retsBuffer
