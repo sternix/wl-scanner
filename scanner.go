@@ -378,7 +378,7 @@ func requestRets(req Request) *bytes.Buffer {
 	}
 
 	// all request have an error return
-	rets = append(rets, " error")
+	rets = append(rets, "error")
 
 	if len(rets) > 1 {
 		retsBuffer.WriteString("(")
