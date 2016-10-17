@@ -139,15 +139,15 @@ func main() {
 
 	wlNames = make(map[string]string)
 
-	constBuffer.WriteString("package wl")
+	fmt.Fprint(&constBuffer,"package wl")
 
 	for _, iface := range protocol.Interfaces {
 		//required for arg type's determine
 		caseAndRegister(iface.Name)
 	}
 
-	reqCodesBuffer.WriteString("\n//Interface Request Codes\n") // request codes
-	reqCodesBuffer.WriteString("\nconst (\n")                   // request codes
+	fmt.Fprint(&reqCodesBuffer,"\n//Interface Request Codes\n") // request codes
+	fmt.Fprint(&reqCodesBuffer,"\nconst (\n")                   // request codes
 
 	for _, iface := range protocol.Interfaces {
 		eventBuffer, eventNames := interfaceEvents(iface)
@@ -159,12 +159,12 @@ func main() {
 		interfaceEnums(iface)
 	}
 
-	reqCodesBuffer.WriteString(")") // request codes end
+	fmt.Fprint(&reqCodesBuffer,")") // request codes end
 
 	// if file exists
 	if _, err := os.Stat("client.go"); err == nil {
 		if !*overwrite {
-			log.Printf("client.go exists if you want to overwrite try -o flag")
+			log.Print("client.go exists if you want to overwrite try -o flag")
 			return
 		}
 	}
@@ -225,25 +225,26 @@ func interfaceConstructor(iface Interface, eventNames []string) {
 	ifaceName := wlNames[iface.Name]
 
 	// interface constructor
-	ifaceBuffer.WriteString(fmt.Sprintf("\nfunc New%s(conn *Connection) *%s {\n", ifaceName, ifaceName))
-	ifaceBuffer.WriteString(fmt.Sprintf("ret := new(%s)\n", ifaceName))
+	fmt.Fprintf(&ifaceBuffer, "\nfunc New%s(conn *Connection) *%s {\n", ifaceName, ifaceName)
+	fmt.Fprintf(&ifaceBuffer, "ret := new(%s)\n", ifaceName)
 	for _, evName := range eventNames {
-		ifaceBuffer.WriteString(fmt.Sprintf("ret.%s = make(chan %s)\n", evName+"Chan", ifaceName+evName+"Event"))
+		fmt.Fprintf(&ifaceBuffer, "ret.%sChan = make(chan %s%sEvent)\n", evName, ifaceName , evName)
 	}
-	ifaceBuffer.WriteString("conn.Register(ret)\n")
-	ifaceBuffer.WriteString("return ret\n")
-	ifaceBuffer.WriteString("}\n")
+
+	fmt.Fprint(&ifaceBuffer, "conn.Register(ret)\n")
+	fmt.Fprint(&ifaceBuffer, "return ret\n")
+	fmt.Fprint(&ifaceBuffer, "}\n")
 }
 
 func interfaceTypes(iface Interface, eventNames []string) {
 	ifaceName := wlNames[iface.Name]
 	// interface type definition
-	ifaceBuffer.WriteString(fmt.Sprintf("\ntype %s struct {\n", ifaceName))
-	ifaceBuffer.WriteString("BaseProxy\n")
+	fmt.Fprintf(&ifaceBuffer,"\ntype %s struct {\n", ifaceName)
+	fmt.Fprint(&ifaceBuffer,"BaseProxy\n")
 	for _, evName := range eventNames {
-		ifaceBuffer.WriteString(fmt.Sprintf("%s chan %s\n", evName+"Chan", ifaceName+evName+"Event"))
+		fmt.Fprintf(&ifaceBuffer,"%sChan chan %s%sEvent\n", evName, ifaceName , evName)
 	}
-	ifaceBuffer.WriteString("}\n")
+	fmt.Fprint(&ifaceBuffer,"}\n")
 }
 
 func interfaceRequests(iface Interface) {
@@ -254,22 +255,22 @@ func interfaceRequests(iface Interface) {
 	for order, req := range iface.Requests {
 		reqName := CamelCase(req.Name)
 		reqCodeName := strings.ToTitle(fmt.Sprintf("_%s_%s", ifaceName, reqName)) // first _ for not export constant
-		reqCodesBuffer.WriteString(fmt.Sprintf("%s = %d\n", reqCodeName, order))
+		fmt.Fprintf(&reqCodesBuffer,"%s = %d\n", reqCodeName, order)
 
-		ifaceBuffer.WriteString(fmt.Sprintf("\nfunc (p *%s) %s(", ifaceName, reqName))
+		fmt.Fprintf(&ifaceBuffer,"\nfunc (p *%s) %s(", ifaceName, reqName)
 		// get args buffer
 		requestArgs(ifaceName, req).WriteTo(&ifaceBuffer)
 
-		ifaceBuffer.WriteString(")") // close the args
+		fmt.Fprint(&ifaceBuffer,")") // close the args
 
 		// get returns buffer
 		requestRets(req).WriteTo(&ifaceBuffer)
-		ifaceBuffer.WriteString("{\n")
+		fmt.Fprint(&ifaceBuffer,"{\n")
 
 		// get method body
 		requestBody(req, reqCodeName).WriteTo(&ifaceBuffer)
 
-		ifaceBuffer.WriteString("\n}\n")
+		fmt.Fprint(&ifaceBuffer,"\n}\n")
 	}
 }
 
@@ -280,14 +281,14 @@ func interfaceEnums(iface Interface) {
 	for _, enum := range iface.Enums {
 		enumName := caseAndRegister(enum.Name)
 		constTypeName := ifaceName + enumName
-		constBuffer.WriteString(fmt.Sprintf("\ntype %s uint32\n", constTypeName)) // enums are uint
-		constBuffer.WriteString("const (\n")
+		fmt.Fprintf(&constBuffer,"\ntype %s uint32\n", constTypeName) // enums are uint
+		fmt.Fprint(&constBuffer,"const (\n")
 		for _, entry := range enum.Entries {
 			entryName := caseAndRegister(entry.Name)
 			constName := ifaceName + enumName + entryName
-			constBuffer.WriteString(fmt.Sprintf("%s %s = %s\n", constName, constTypeName, entry.Value))
+			fmt.Fprintf(&constBuffer,"%s %s = %s\n", constName, constTypeName, entry.Value)
 		}
-		constBuffer.WriteString(")\n")
+		fmt.Fprint(&constBuffer,")\n")
 	}
 }
 
@@ -301,15 +302,14 @@ func interfaceEvents(iface Interface) (bytes.Buffer, []string) {
 	// Event struct types
 	for _, event := range iface.Events {
 		eventName := caseAndRegister(event.Name)
-		typeName := ifaceName + eventName + "Event"
-		eventBuffer.WriteString(fmt.Sprintf("\ntype %s struct {\n", typeName))
+		fmt.Fprintf(&eventBuffer,"\ntype %s%sEvent struct {\n", ifaceName , eventName)
 		for _, arg := range event.Args {
 			if t, ok := wlTypes[arg.Type]; ok { // if basic type
 				if arg.Type == "uint" && arg.Enum != "" { // enum type
 					enumTypeName := ifaceName + CamelCase(arg.Enum)
-					eventBuffer.WriteString(fmt.Sprintf("%s %s\n", CamelCase(arg.Name), enumTypeName))
+					fmt.Fprintf(&eventBuffer,"%s %s\n", CamelCase(arg.Name), enumTypeName)
 				} else {
-					eventBuffer.WriteString(fmt.Sprintf("%s %s\n", CamelCase(arg.Name), t))
+					fmt.Fprintf(&eventBuffer,"%s %s\n", CamelCase(arg.Name), t)
 				}
 			} else { // interface type
 				if (arg.Type == "object" || arg.Type == "new_id") && arg.Interface != "" {
@@ -317,12 +317,12 @@ func interfaceEvents(iface Interface) (bytes.Buffer, []string) {
 				} else {
 					t = "Proxy"
 				}
-				eventBuffer.WriteString(fmt.Sprintf("%s %s\n", CamelCase(arg.Name), t))
+				fmt.Fprintf(&eventBuffer,"%s %s\n", CamelCase(arg.Name), t)
 			}
 		}
 
 		eventNames = append(eventNames, eventName)
-		eventBuffer.WriteString("}\n")
+		fmt.Fprint(&eventBuffer,"}\n")
 	}
 
 	return eventBuffer, eventNames
@@ -354,7 +354,7 @@ func requestArgs(ifaceName string, req Request) *bytes.Buffer {
 		}
 	}
 
-	argsBuffer.WriteString(strings.Join(args,","))
+	fmt.Fprint(&argsBuffer,strings.Join(args, ","))
 
 	return &argsBuffer
 }
@@ -375,14 +375,12 @@ func requestRets(req Request) *bytes.Buffer {
 	// all request have an error return
 	rets = append(rets, "error")
 
-	retstr := strings.Join(rets,",")
+	retstr := strings.Join(rets, ",")
 
 	if len(rets) > 1 {
-		retsBuffer.WriteString("(")
-		retsBuffer.WriteString(retstr)
-		retsBuffer.WriteString(")")
+		fmt.Fprintf(&retsBuffer,"( %s )",retstr)
 	} else {
-		retsBuffer.WriteString(retstr)
+		fmt.Fprint(&retsBuffer,retstr)
 	}
 
 	return &retsBuffer
@@ -393,16 +391,16 @@ func requestBody(req Request, reqCodeName string) *bytes.Buffer {
 		params       []string
 		bodyBuffer   bytes.Buffer
 		paramsBuffer bytes.Buffer
-		hasRetType   string
+		hasRet   string
 	)
 
 	for _, arg := range req.Args {
 		if arg.Type == "new_id" {
 			if arg.Interface != "" {
 				retTypeName := wlNames[arg.Interface]
-				bodyBuffer.WriteString(fmt.Sprintf("ret := New%s(p.Connection())\n", retTypeName))
+				fmt.Fprintf(&bodyBuffer,"ret := New%s(p.Connection())\n", retTypeName)
 				params = append(params, "Proxy(ret)")
-				hasRetType = "ret,"
+				hasRet = "ret,"
 			} else {
 				params = append(params, "iface")
 				params = append(params, "version")
@@ -414,10 +412,10 @@ func requestBody(req Request, reqCodeName string) *bytes.Buffer {
 	}
 
 	for _, param := range params {
-		paramsBuffer.WriteString(fmt.Sprintf(",%s", param))
+		fmt.Fprintf(&paramsBuffer,",%s", param)
 	}
 
-	bodyBuffer.WriteString(fmt.Sprintf("return %s p.Connection().SendRequest(p,%s%s)", hasRetType, reqCodeName, paramsBuffer.String()))
+	fmt.Fprintf(&bodyBuffer,"return %s p.Connection().SendRequest(p,%s%s)", hasRet, reqCodeName, paramsBuffer.String())
 
 	return &bodyBuffer
 }
