@@ -113,7 +113,7 @@ func main() {
 		file, err := getDevelXml()
 		if err != nil {
 			file.Close()
-			log.Fatalf("Error while reading xml file : %s", err)
+			log.Fatalf("Error while reading xml file: %s", err)
 		}
 		xmlFile = file
 		xmlFile.Seek(0, 0)
@@ -125,7 +125,7 @@ func main() {
 
 		file, err := os.Open(xmlFilePath)
 		if err != nil {
-			log.Fatalf("Cannot open wayland.xml:%s", err)
+			log.Fatalf("Cannot open wayland.xml: %s", err)
 		}
 		xmlFile = file
 	}
@@ -134,7 +134,7 @@ func main() {
 
 	var protocol Protocol
 	if err := xml.NewDecoder(xmlFile).Decode(&protocol); err != nil {
-		log.Fatalf("Cannot decode wayland.xml : %s", err)
+		log.Fatalf("Cannot decode wayland.xml: %s", err)
 	}
 
 	wlNames = make(map[string]string)
@@ -424,7 +424,7 @@ func getDevelXml() (*os.File, error) {
 	url := "https://cgit.freedesktop.org/wayland/wayland/plain/protocol/wayland.xml"
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("http get error")
+		return nil, fmt.Errorf("HTTP Get error: %s", err)
 	}
 
 	defer resp.Body.Close()
@@ -457,6 +457,6 @@ func fmtFile() {
 	cmd := exec.Command(goex, "fmt", "client.go")
 	errr := cmd.Run()
 	if errr != nil {
-		log.Fatalf("Cannot run cmd : %s", errr)
+		log.Fatalf("Cannot run cmd: %s", errr)
 	}
 }
