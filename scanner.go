@@ -436,26 +436,27 @@ func getDevelXml() (*os.File, error) {
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("Cannot read response body: %s", err)
-	} else {
-		file, err := ioutil.TempFile("", "devel_wayland_xml")
-		if err != nil {
-			return nil, fmt.Errorf("Cannot create temp file: %s", err)
-		} else {
-			file.Write(body)
-			return file, nil
-		}
 	}
+
+	file, err := ioutil.TempFile("", "devel_wayland_xml")
+	if err != nil {
+		return nil, fmt.Errorf("Cannot create temp file: %s", err)
+	}
+
+	file.Write(body)
+	return file, nil
 }
 
 func fmtFile() {
 	goex, err := exec.LookPath("go")
 	if err != nil {
 		log.Printf("go executable cannot found run \"go fmt client.go\" yourself: %s", err)
-	} else {
-		cmd := exec.Command(goex, "fmt", "client.go")
-		err := cmd.Run()
-		if err != nil {
-			log.Fatalf("Cannot run cmd : %s", err)
-		}
+		return
+	}
+
+	cmd := exec.Command(goex, "fmt", "client.go")
+	errr := cmd.Run()
+	if errr != nil {
+		log.Fatalf("Cannot run cmd : %s", errr)
 	}
 }
