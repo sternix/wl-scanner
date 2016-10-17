@@ -390,8 +390,7 @@ func requestBody(req Request, reqCodeName string) *bytes.Buffer {
 	var (
 		params     []string
 		bodyBuffer bytes.Buffer
-		//	paramsBuffer bytes.Buffer
-		hasRet string
+		hasRet     string
 	)
 
 	for _, arg := range req.Args {
@@ -410,11 +409,6 @@ func requestBody(req Request, reqCodeName string) *bytes.Buffer {
 			params = append(params, arg.Name)
 		}
 	}
-
-	//fmt.Fprintf(&paramsBuffer, ",%s", strings.Join(params, ","))
-	//paramStr := fmt.Sprintf(",%s",strings.Join(params,","))
-
-	//fmt.Fprintf(&bodyBuffer, "return %s p.Connection().SendRequest(p,%s%s)", hasRet, reqCodeName, paramsBuffer.String())
 
 	fmt.Fprintf(&bodyBuffer, "return %s p.Connection().SendRequest(p,%s,%s)", hasRet, reqCodeName, strings.Join(params, ","))
 
