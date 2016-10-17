@@ -125,7 +125,7 @@ func main() {
 
 		file, err := os.Open(xmlFilePath)
 		if err != nil {
-			log.Fatal("Cannot open wayland.xml")
+			log.Fatalf("Cannot open wayland.xml:%s", err)
 		}
 		xmlFile = file
 	}
@@ -430,16 +430,16 @@ func getDevelXml() (*os.File, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Cannot get wayland.xml StatusCode error")
+		return nil, fmt.Errorf("Cannot get wayland.xml StatusCode != StatusOK")
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("Cannot read response body")
+		return nil, fmt.Errorf("Cannot read response body: %s", err)
 	} else {
 		file, err := ioutil.TempFile("", "devel_wayland_xml")
 		if err != nil {
-			return nil, fmt.Errorf("Cannot create temp file")
+			return nil, fmt.Errorf("Cannot create temp file: %s", err)
 		} else {
 			file.Write(body)
 			return file, nil
@@ -450,7 +450,7 @@ func getDevelXml() (*os.File, error) {
 func fmtFile() {
 	goex, err := exec.LookPath("go")
 	if err != nil {
-		log.Println("go executable cannot found run \"go fmt client.go\" yourself")
+		log.Printf("go executable cannot found run \"go fmt client.go\" yourself: %s", err)
 	} else {
 		cmd := exec.Command(goex, "fmt", "client.go")
 		err := cmd.Run()
