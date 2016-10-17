@@ -195,13 +195,13 @@ func caseAndRegister(wlName string) string {
 func enumArgName(ifaceName, enumName string) string {
 	if strings.Index(enumName, ".") == -1 {
 		return ifaceName + CamelCase(enumName)
-	} else {
-		parts := strings.Split(enumName, ".")
-		if len(parts) != 2 {
-			log.Fatal("enum args must be \"interface.enum\" format")
-		}
-		return CamelCase(parts[0]) + CamelCase(parts[1])
 	}
+
+	parts := strings.Split(enumName, ".")
+	if len(parts) != 2 {
+		log.Fatal("enum args must be \"interface.enum\" format")
+	}
+	return CamelCase(parts[0]) + CamelCase(parts[1])
 }
 
 func CamelCase(wlName string) string {
@@ -388,10 +388,10 @@ func requestRets(req Request) *bytes.Buffer {
 
 func requestBody(req Request, reqCodeName string) *bytes.Buffer {
 	var (
-		params       []string
-		bodyBuffer   bytes.Buffer
-		paramsBuffer bytes.Buffer
-		hasRet       string
+		params     []string
+		bodyBuffer bytes.Buffer
+		//	paramsBuffer bytes.Buffer
+		hasRet string
 	)
 
 	for _, arg := range req.Args {
@@ -411,11 +411,12 @@ func requestBody(req Request, reqCodeName string) *bytes.Buffer {
 		}
 	}
 
-	for _, param := range params {
-		fmt.Fprintf(&paramsBuffer, ",%s", param)
-	}
+	//fmt.Fprintf(&paramsBuffer, ",%s", strings.Join(params, ","))
+	//paramStr := fmt.Sprintf(",%s",strings.Join(params,","))
 
-	fmt.Fprintf(&bodyBuffer, "return %s p.Connection().SendRequest(p,%s%s)", hasRet, reqCodeName, paramsBuffer.String())
+	//fmt.Fprintf(&bodyBuffer, "return %s p.Connection().SendRequest(p,%s%s)", hasRet, reqCodeName, paramsBuffer.String())
+
+	fmt.Fprintf(&bodyBuffer, "return %s p.Connection().SendRequest(p,%s,%s)", hasRet, reqCodeName, strings.Join(params, ","))
 
 	return &bodyBuffer
 }
