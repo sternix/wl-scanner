@@ -226,13 +226,13 @@ func interfaceConstructor(iface Interface, eventNames []string) {
 	ifaceName := wlNames[iface.Name]
 
 	// interface constructor
-	fmt.Fprintf(&ifaceBuffer, "\nfunc new%s(conn *Connection) *%s {\n", ifaceName, ifaceName)
+	fmt.Fprintf(&ifaceBuffer, "\nfunc new%s(conn *connection) *%s {\n", ifaceName, ifaceName)
 	fmt.Fprintf(&ifaceBuffer, "ret := new(%s)\n", ifaceName)
 	for _, evName := range eventNames {
 		fmt.Fprintf(&ifaceBuffer, "ret.%sChan = make(chan %s%sEvent)\n", evName, ifaceName, evName)
 	}
 
-	fmt.Fprint(&ifaceBuffer, "conn.Register(ret)\n")
+	fmt.Fprint(&ifaceBuffer, "conn.register(ret)\n")
 	fmt.Fprint(&ifaceBuffer, "return ret\n")
 	fmt.Fprint(&ifaceBuffer, "}\n")
 }
@@ -411,7 +411,7 @@ func requestBody(req Request, reqCodeName string) *bytes.Buffer {
 		}
 	}
 
-	fmt.Fprintf(&bodyBuffer, "return %s p.Connection().SendRequest(p,%s,%s)", hasRet, reqCodeName, strings.Join(params, ","))
+	fmt.Fprintf(&bodyBuffer, "return %s p.Connection().sendRequest(p,%s,%s)", hasRet, reqCodeName, strings.Join(params, ","))
 
 	return &bodyBuffer
 }
