@@ -98,6 +98,7 @@ var (
 		"string":  "String()",
 		"float32": "Float32()",
 		"[]int32": "Array()",
+		"uintptr": "FD()",
 	}
 
 	wlNames        map[string]string
@@ -324,12 +325,8 @@ func interfaceDispatch(iface Interface) {
 					} else {
 						fmt.Fprintf(&eventBuffer, "%s %s\n", CamelCase(arg.Name), t)
 					}*/
-				bufMethod, ok := bufTypesMap[t]
-				if !ok {
-					fmt.Fprintf(&ifaceBuffer, "ev.%s = event.FD()\n", CamelCase(arg.Name))
-				} else {
-					fmt.Fprintf(&ifaceBuffer, "ev.%s = event.%s\n", CamelCase(arg.Name), bufMethod)
-				}
+				bufMethod, _ := bufTypesMap[t]
+				fmt.Fprintf(&ifaceBuffer, "ev.%s = event.%s\n", CamelCase(arg.Name), bufMethod)
 			} else { // interface type
 				if (arg.Type == "object" || arg.Type == "new_id") && arg.Interface != "" {
 					t = "*" + wlNames[arg.Interface] // type assertion
