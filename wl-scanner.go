@@ -325,12 +325,16 @@ func interfaceDispatch(iface Interface) {
 					} else {
 						fmt.Fprintf(&eventBuffer, "%s %s\n", CamelCase(arg.Name), t)
 					}*/
-				bufMethod, _ := bufTypesMap[t]
-				fmt.Fprintf(&ifaceBuffer, "ev.%s = event.%s\n", CamelCase(arg.Name), bufMethod)
+				bufMethod, ok := bufTypesMap[t]
+				if !ok {
+					log.Printf("%s not registered", t)
+				} else {
+					fmt.Fprintf(&ifaceBuffer, "ev.%s = event.%s\n", CamelCase(arg.Name), bufMethod)
+				}
 			} else { // interface type
 				if (arg.Type == "object" || arg.Type == "new_id") && arg.Interface != "" {
 					t = "*" + wlNames[arg.Interface] // type assertion
-					fmt.Fprintf(&ifaceBuffer, "ev.%s , _ = event.Proxy(p.Connection()).(%s)\n", CamelCase(arg.Name), t)
+					fmt.Fprintf(&ifaceBuffer, "ev.%s = event.Proxy(p.Connection()).(%s)\n", CamelCase(arg.Name), t)
 				} else {
 					fmt.Fprintf(&ifaceBuffer, "ev.%s = event.Proxy(p.Connection())\n", CamelCase(arg.Name))
 				}
