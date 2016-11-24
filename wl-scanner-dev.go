@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -211,31 +212,22 @@ func caseAndRegister(wlName string) string {
 	return wlName
 }
 
-func (i *GoInterface) Constructor() {
-	tmpl := template.Must(template.New("InterfaceTypeTemplate").Parse(ifaceTypeTemplate))
-	err := tmpl.Execute(os.Stdout, i)
+func executeTemplate(name string, tpl string, w io.Writer, data interface{}) {
+	tmpl := template.Must(template.New(name).Parse(tpl))
+	err := tmpl.Execute(w, data)
 	if err != nil {
 		log.Fatal(err)
 	}
+}
 
-	tmpl = template.Must(template.New("InterfaceConstructorTemplate").Parse(ifaceConstructorTemplate))
-	err = tmpl.Execute(os.Stdout, i)
-	if err != nil {
-		log.Fatal(err)
-	}
+func (i *GoInterface) Constructor() {
+	executeTemplate("InterfaceTypeTemplate", ifaceTypeTemplate, os.Stdout, i)
+
+	executeTemplate("InterfaceConstructorTemplate", ifaceConstructorTemplate, os.Stdout, i)
 
 	if len(i.Events) > 0 {
-		tmpl = template.Must(template.New("InterfaceDisposeTemplate").Parse(ifaceDisposeTemplate))
-		err = tmpl.Execute(os.Stdout, i)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		tmpl = template.Must(template.New("InterfaceHandleEventsTemplate").Parse(ifaceHandleEventsTemplate))
-		err = tmpl.Execute(os.Stdout, i)
-		if err != nil {
-			log.Fatal(err)
-		}
+		executeTemplate("InterfaceDisposeTemplate", ifaceDisposeTemplate, os.Stdout, i)
+		executeTemplate("InterfaceHandleEventsTemplate", ifaceHandleEventsTemplate, os.Stdout, i)
 	}
 }
 
@@ -300,12 +292,7 @@ func (i *GoInterface) ProcessRequests() {
 			req.Returns = "error"
 		}
 
-		tmpl := template.Must(template.New("RequestTemplate").Parse(requestTemplate))
-		err := tmpl.Execute(os.Stdout, req)
-		if err != nil {
-			log.Fatal(err)
-		}
-
+		executeTemplate("RequestTemplate", requestTemplate, os.Stdout, req)
 		i.Requests = append(i.Requests, req)
 	}
 }
@@ -314,9 +301,8 @@ func (i *GoInterface) ProcessEvents() {
 	// Event struct types
 	for _, wlEv := range i.WlInterface.Events {
 		ev := GoEvent{
-			Name:  CamelCase(wlEv.Name),
-			PName: snakeCase(wlEv.Name),
-			//WlEvent:   wlEv,
+			Name:      CamelCase(wlEv.Name),
+			PName:     snakeCase(wlEv.Name),
 			IfaceName: i.Name,
 		}
 
@@ -354,21 +340,14 @@ func (i *GoInterface) ProcessEvents() {
 			ev.Args = append(ev.Args, goarg)
 		}
 
-		tmpl := template.Must(template.New("EventTemplate").Parse(eventTemplate))
-		err := tmpl.Execute(os.Stdout, ev)
-		if err != nil {
-			log.Fatal(err)
-		}
+		executeTemplate("EventTemplate", eventTemplate, os.Stdout, ev)
+		executeTemplate("AddRemoveHandlerTemplate", ifaceAddRemoveHandlerTemplate, os.Stdout, ev)
 
 		i.Events = append(i.Events, ev)
 	}
 
 	if len(i.Events) > 0 {
-		tmpl := template.Must(template.New("InterfaceDispatchTemplate").Parse(ifaceDispatchTemplate))
-		err := tmpl.Execute(os.Stdout, i)
-		if err != nil {
-			log.Fatal(err)
-		}
+		executeTemplate("InterfaceDispatchTemplate", ifaceDispatchTemplate, os.Stdout, i)
 	}
 }
 
@@ -388,11 +367,7 @@ func (i *GoInterface) ProcessEnums() {
 			goEnum.Entries = append(goEnum.Entries, goEntry)
 		}
 
-		tmpl := template.Must(template.New("InterfaceEnumsTemplate").Parse(ifaceEnums))
-		err := tmpl.Execute(os.Stdout, goEnum)
-		if err != nil {
-			log.Fatal(err)
-		}
+		executeTemplate("InterfaceEnumsTemplate", ifaceEnums, os.Stdout, goEnum)
 	}
 }
 
@@ -451,13 +426,13 @@ var (
 type {{.Name}} struct {
 	BaseProxy
 	{{- if gt (len .Events) 0 }}
-	mu sync.Mutex
+	mu sync.RWMutex
 	{{- end}}
 
 	{{- $ifaceName := .Name }}
 	{{- range .Events}}
 	{{.PName}}Chan chan {{$ifaceName}}{{.Name}}Event
-	On{{.Name}} func({{$ifaceName}}{{.Name}}Event)
+	{{.PName}}Handlers []Handler
 	{{- end}}
 
 	{{- if gt (len .Events) 0 }}
@@ -496,14 +471,36 @@ loop:
 		select {
 		{{- range .Events}}
 		case ev := <-p.{{.PName}}Chan:
-			mu.Lock()
-			if p.On{{.Name}} != nil {
-				p.On{{.Name}}(ev)
+			p.mu.RLock()
+			for _, h := range p.{{.PName}}Handlers {
+				h.Handle(ev)
 			}
-			mu.Unlock()
+			p.mu.RUnlock()
 		{{- end}}
 		case <-p.disposeChan:
 			break loop
+		}
+	}
+}
+`
+
+	ifaceAddRemoveHandlerTemplate = `
+func (p *{{.IfaceName}}) Add{{.Name}}Handler(h Handler) {
+	if h != nil {
+		p.mu.Lock()
+		p.{{.PName}}Handlers = append(p.{{.PName}}Handlers , h)
+		p.mu.Unlock()
+	}
+}
+
+func (p *{{.IfaceName}}) Remove{{.Name}}Handler(h Handler) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for i , e := range p.{{.PName}}Handlers {
+		if e == h {
+			p.{{.PName}}Handlers = append(p.{{.PName}}Handlers[:i] , p.{{.PName}}Handlers[i+1:]...)
+			break
 		}
 	}
 }
@@ -533,15 +530,33 @@ func (p *{{.Name}}) Dispatch(event *Event) {
 	switch event.opcode {
 	{{- range $i , $event := .Events }}
 	case {{$i}}:
-		ev := new({{$ifaceName}}{{.Name}}Event)
+		ev := {{$ifaceName}}{{.Name}}Event{}
 		{{- range $event.Args}}
-		ev.{{.PName}} = event.{{.BufMethod}}
+		ev.{{.Name}} = event.{{.BufMethod}}
 		{{- end}}
 		p.{{.PName}}Chan<-ev
 	{{- end}}
 	}
 }
 `
+
+	/* for ptr events
+	   func (p *{{.Name}}) Dispatch(event *Event) {
+	   	{{- $ifaceName := .Name }}
+	   	switch event.opcode {
+	   	{{- range $i , $event := .Events }}
+	   	case {{$i}}:
+	   		ev := new({{$ifaceName}}{{.Name}}Event)
+	   		{{- range $event.Args}}
+	   		ev.{{.Name}} = event.{{.BufMethod}}
+	   		{{- end}}
+	   		p.{{.PName}}Chan<-ev
+	   	{{- end}}
+	   	}
+	   }
+
+	*/
+
 	ifaceEnums = `
 const (
 	{{- $ifaceName := .IfaceName }}
