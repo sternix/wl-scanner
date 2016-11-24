@@ -271,6 +271,7 @@ func (i *GoInterface) ProcessRequests() {
 			} else if arg.Type == "object" && arg.Interface != "" {
 				paramTypeName := wlNames[arg.Interface]
 				params = append(params, fmt.Sprintf("%s *%s", arg.Name, paramTypeName))
+				sendRequestArgs = append(sendRequestArgs, arg.Name)
 				/*} else if arg.Type == "uint" && arg.Enum != "" {
 					params = append(params, fmt.Sprintf("%s %s", arg.Name, enumArgName(ifaceName, arg.Enum)))
 				}*/
@@ -455,6 +456,7 @@ func New{{.Name}}(ctx *Context) *{{.Name}} {
 	go ret.handleEvents()
 	{{- end }}
 	ctx.register(ret)
+	log.Printf("{{.Name}} Registered id: %d",ret.Id())
 	return ret
 }
 `
