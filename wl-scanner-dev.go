@@ -563,15 +563,17 @@ func (p *{{.Name}}) Dispatch(event *Event) {
 	switch event.opcode {
 	{{- range $i , $event := .Events }}
 	case {{$i}}:
-		ev := {{$ifaceName}}{{.Name}}Event{}
-		{{- range $event.Args}}
-		ev.{{.Name}} = event.{{.BufMethod}}
-		{{- end}}
-		p.mu.RLock()
-		for _, h := range p.{{.PName}}Handlers {
-			h.Handle(ev)
+		if len(p.{{.PName}}Handlers) > 0 {
+			ev := {{$ifaceName}}{{.Name}}Event{}
+			{{- range $event.Args}}
+			ev.{{.Name}} = event.{{.BufMethod}}
+			{{- end}}
+			p.mu.RLock()
+			for _, h := range p.{{.PName}}Handlers {
+				h.Handle(ev)
+			}
+			p.mu.RUnlock()
 		}
-		p.mu.RUnlock()
 	{{- end}}
 	}
 }
