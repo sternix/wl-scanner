@@ -225,10 +225,12 @@ func (i *GoInterface) Constructor() {
 
 	executeTemplate("InterfaceConstructorTemplate", ifaceConstructorTemplate, os.Stdout, i)
 
-	if len(i.Events) > 0 {
-		executeTemplate("InterfaceDisposeTemplate", ifaceDisposeTemplate, os.Stdout, i)
-		executeTemplate("InterfaceHandleEventsTemplate", ifaceHandleEventsTemplate, os.Stdout, i)
-	}
+	/*
+		if len(i.Events) > 0 {
+			executeTemplate("InterfaceDisposeTemplate", ifaceDisposeTemplate, os.Stdout, i)
+			executeTemplate("InterfaceHandleEventsTemplate", ifaceHandleEventsTemplate, os.Stdout, i)
+		}
+	*/
 }
 
 func (i *GoInterface) ProcessRequests() {
@@ -423,6 +425,28 @@ func snakeCase(wlName string) string {
 
 // templates
 var (
+
+	/*
+	   	ifaceTypeTemplate = `
+	   type {{.Name}} struct {
+	   	BaseProxy
+	   	{{- if gt (len .Events) 0 }}
+	   	mu sync.RWMutex
+	   	{{- end}}
+
+	   	{{- $ifaceName := .Name }}
+	   	{{- range .Events}}
+	   	{{.PName}}Chan chan {{$ifaceName}}{{.Name}}Event
+	   	{{.PName}}Handlers []Handler
+	   	{{- end}}
+
+	   	{{- if gt (len .Events) 0 }}
+	   	disposeChan chan struct{}
+	   	{{- end}}
+	   }
+	   `
+	*/
+
 	ifaceTypeTemplate = `
 type {{.Name}} struct {
 	BaseProxy
@@ -430,61 +454,68 @@ type {{.Name}} struct {
 	mu sync.RWMutex
 	{{- end}}
 
-	{{- $ifaceName := .Name }}
 	{{- range .Events}}
-	{{.PName}}Chan chan {{$ifaceName}}{{.Name}}Event
 	{{.PName}}Handlers []Handler
-	{{- end}}
-
-	{{- if gt (len .Events) 0 }}
-	disposeChan chan struct{}
 	{{- end}}
 }
 `
+	/*
+	   	ifaceConstructorTemplate = `
+	   func New{{.Name}}(ctx *Context) *{{.Name}} {
+	   	ret := new({{.Name}})
+
+	   	{{- $ifaceName := .Name }}
+	   	{{- range .Events}}
+	   	ret.{{.PName}}Chan = make(chan {{$ifaceName}}{{.Name}}Event)
+	   	{{- end}}
+
+	   	{{- if gt (len .Events) 0}}
+	   	ret.disposeChan = make(chan struct{})
+	   	go ret.handleEvents()
+	   	{{- end }}
+	   	ctx.register(ret)
+	   	log.Printf("{{.Name}} Registered id: %d",ret.Id())
+	   	return ret
+	   }
+	   `*/
 
 	ifaceConstructorTemplate = `
 func New{{.Name}}(ctx *Context) *{{.Name}} {
 	ret := new({{.Name}})
-
-	{{- $ifaceName := .Name }}
-	{{- range .Events}}
-	ret.{{.PName}}Chan = make(chan {{$ifaceName}}{{.Name}}Event)
-	{{- end}}
-
-	{{- if gt (len .Events) 0}}
-	ret.disposeChan = make(chan struct{})
-	go ret.handleEvents()
-	{{- end }}
 	ctx.register(ret)
-	log.Printf("{{.Name}} Registered id: %d",ret.Id())
 	return ret
 }
 `
-	ifaceDisposeTemplate = `
-func (p *{{.Name}}) Dispose() {
-	p.disposeChan <- struct{}{}
-}
-`
 
-	ifaceHandleEventsTemplate = `
-func (p *{{.Name}}) handleEvents() {
-loop:
-	for {
-		select {
-		{{- range .Events}}
-		case ev := <-p.{{.PName}}Chan:
-			p.mu.RLock()
-			for _, h := range p.{{.PName}}Handlers {
-				h.Handle(ev)
-			}
-			p.mu.RUnlock()
-		{{- end}}
-		case <-p.disposeChan:
-			break loop
-		}
-	}
-}
-`
+	/*
+	   	ifaceDisposeTemplate = `
+	   func (p *{{.Name}}) Dispose() {
+	   	p.disposeChan <- struct{}{}
+	   }
+	   `
+	*/
+
+	/*
+	   	ifaceHandleEventsTemplate = `
+	   func (p *{{.Name}}) handleEvents() {
+	   loop:
+	   	for {
+	   		select {
+	   		{{- range .Events}}
+	   		case ev := <-p.{{.PName}}Chan:
+	   			p.mu.RLock()
+	   			for _, h := range p.{{.PName}}Handlers {
+	   				h.Handle(ev)
+	   			}
+	   			p.mu.RUnlock()
+	   		{{- end}}
+	   		case <-p.disposeChan:
+	   			break loop
+	   		}
+	   	}
+	   }
+	   `
+	*/
 
 	ifaceAddRemoveHandlerTemplate = `
 func (p *{{.IfaceName}}) Add{{.Name}}Handler(h Handler) {
@@ -536,11 +567,32 @@ func (p *{{.Name}}) Dispatch(event *Event) {
 		{{- range $event.Args}}
 		ev.{{.Name}} = event.{{.BufMethod}}
 		{{- end}}
-		p.{{.PName}}Chan<-ev
+		p.mu.RLock()
+		for _, h := range p.{{.PName}}Handlers {
+			h.Handle(ev)
+		}
+		p.mu.RUnlock()
 	{{- end}}
 	}
 }
 `
+	/*
+	   	ifaceDispatchTemplate = `
+	   func (p *{{.Name}}) Dispatch(event *Event) {
+	   	{{- $ifaceName := .Name }}
+	   	switch event.opcode {
+	   	{{- range $i , $event := .Events }}
+	   	case {{$i}}:
+	   		ev := {{$ifaceName}}{{.Name}}Event{}
+	   		{{- range $event.Args}}
+	   		ev.{{.Name}} = event.{{.BufMethod}}
+	   		{{- end}}
+	   		p.{{.PName}}Chan<-ev
+	   	{{- end}}
+	   	}
+	   }
+	   `
+	*/
 
 	/* for ptr events
 	   func (p *{{.Name}}) Dispatch(event *Event) {
